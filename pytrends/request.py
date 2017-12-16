@@ -30,10 +30,11 @@ class TrendReq(object):
     TOP_CHARTS_URL = 'https://trends.google.com/trends/topcharts/chart'
     SUGGESTIONS_URL = 'https://trends.google.com/trends/api/autocomplete/'
 
-    def __init__(self, hl='en-US', tz=360, geo=''):
+    def __init__(self, hl='en-US', tz=360, geo='', proxies=None):
         """
         Initialize default values for params
         """
+        
         # google rate limit
         self.google_rl = 'You have reached your quota limit. Please try again later.'
         self.results = None
@@ -42,6 +43,7 @@ class TrendReq(object):
         self.tz = tz
         self.hl = hl
         self.geo = geo
+        self.proxies = proxies
         self.kw_list = list()
 
         # intialize widget payloads
@@ -62,9 +64,9 @@ class TrendReq(object):
         :return:
         """
         if method == TrendReq.POST_METHOD:
-            response = requests.post(url, **kwargs)
+            response = requests.post(url, proxies=self.proxies, **kwargs)
         else:
-            response = requests.get(url, **kwargs)
+            response = requests.get(url, proxies=self.proxies, **kwargs)
 
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
@@ -344,3 +346,4 @@ class TrendReq(object):
             trim_chars=5
         )['default']['topics']
         return req_json
+        
