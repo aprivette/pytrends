@@ -5,8 +5,8 @@ import sys
 
 import pandas as pd
 import requests
-
-from pytrends import exceptions
+from requests import Session
+from requests_futures.sessions import FuturesSession
 
 if sys.version_info[0] == 2:  # Python 2
     from urllib import quote
@@ -54,41 +54,53 @@ class TrendReq(object):
         self.related_topics_widget_list = list()
         self.related_queries_widget_list = list()
 
-    def _get_data(self, url, method=GET_METHOD, trim_chars=0, **kwargs):
+    def _get_data(self, urls, method=GET_METHOD, trim_chars=0, **kwargs):
         """Send a request to Google and return the JSON response as a Python object
 
-        :param url: the url to which the request will be sent
+        :param urls: list of url to which the request will be sent
         :param method: the HTTP method ('get' or 'post')
         :param trim_chars: how many characters should be trimmed off the beginning of the content of the response
             before this is passed to the JSON parser
         :param kwargs: any extra key arguments passed to the request builder (usually query parameters or data)
         :return:
         """
+        futures = []
+        session = FuturesSession()
         if method == TrendReq.POST_METHOD:
-            response = requests.post(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
+            for url in urls:
+                future = session.post(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
+                futures.append(future)
         else:
-            response = requests.get(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
-
+            for url in urls:
+                future = session.get(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
+                futures.append(future)
+                
+        futures_responses = futures.result()
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
         # but occasionally it sends 'application/javascript
         # and sometimes even 'text/javascript
-        if 'application/json' in response.headers['Content-Type'] or \
-            'application/javascript' in response.headers['Content-Type'] or \
-                'text/javascript' in response.headers['Content-Type']:
-
-            # trim initial characters
-            # some responses start with garbage characters, like ")]}',"
-            # these have to be cleaned before being passed to the json parser
-            content = response.text[trim_chars:]
-
-            # parse json
-            return json.loads(content)
-        else:
-            # this is often the case when the amount of keywords in the payload for the IP
-            # is not allowed by Google
-            raise exceptions.ResponseError('The request failed: Google returned a '
-                                           'response with code {0}.'.format(response.status_code), response=response)
+        responses = []
+        for response in futures_responses:
+            if 'application/json' in response.headers['Content-Type'] or \
+                'application/javascript' in response.headers['Content-Type'] or \
+                    'text/javascript' in response.headers['Content-Type']:
+    
+                # trim initial characters
+                # some responses start with garbage characters, like ")]}',"
+                # these have to be cleaned before being passed to the json parser
+                content = response.text[trim_chars:]
+    
+                # parse json
+                result = json.loads(content)
+                responses.append(result)
+            else:
+                # this is often the case when the amount of keywords in the payload for the IP
+                # is not allowed by Google
+                raise exceptions.ResponseError('The request failed: Google returned a '
+                                               'response with code {0}.'.format(response.status_code), response=response)
+                                               
+        return responses
 
     def build_payload(self, kw_list, cat=0, timeframe='today 5-y', geo='', gprop=''):
         """Create the payload for related queries, interest over time and interest by region"""
