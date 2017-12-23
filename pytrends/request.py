@@ -30,7 +30,7 @@ class TrendReq(object):
     TOP_CHARTS_URL = 'https://trends.google.com/trends/topcharts/chart'
     SUGGESTIONS_URL = 'https://trends.google.com/trends/api/autocomplete/'
 
-    def __init__(self, hl='en-US', tz=360, geo='', proxies=None):
+    def __init__(self, hl='en-US', tz=360, geo='', proxies=None, timeout=None):
         """
         Initialize default values for params
         """
@@ -43,6 +43,7 @@ class TrendReq(object):
         self.hl = hl
         self.geo = geo
         self.proxies = proxies
+        self.timeout = timeout
         self.kw_list = list()
 
         # intialize widget payloads
@@ -65,7 +66,7 @@ class TrendReq(object):
         if method == TrendReq.POST_METHOD:
             response = requests.post(url, proxies=self.proxies, **kwargs)
         else:
-            response = requests.get(url, proxies=self.proxies, **kwargs)
+            response = requests.get(url, proxies=self.proxies, timeout=self.timeout **kwargs)
 
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
