@@ -63,9 +63,9 @@ class TrendReq(object):
         :return:
         """
         if method == TrendReq.POST_METHOD:
-            response = requests.post(url, self.proxies, **kwargs)
+            response = requests.post(url, proxies=self.proxies, **kwargs)
         else:
-            response = requests.get(url, self.proxies, **kwargs)
+            response = requests.get(url, proxies=self.proxies, **kwargs)
 
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
