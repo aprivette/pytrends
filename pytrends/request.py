@@ -4,8 +4,7 @@ import json
 import sys
 
 import pandas as pd
-from requests import Session
-from requests_futures.sessions import FuturesSession
+import requests
 
 from pytrends import exceptions
 
@@ -31,11 +30,10 @@ class TrendReq(object):
     TOP_CHARTS_URL = 'https://trends.google.com/trends/topcharts/chart'
     SUGGESTIONS_URL = 'https://trends.google.com/trends/api/autocomplete/'
 
-    def __init__(self, hl='en-US', tz=360, geo='', proxies=None, timeout=None):
+    def __init__(self, hl='en-US', tz=360, geo='', proxies=None):
         """
         Initialize default values for params
         """
-        
         # google rate limit
         self.google_rl = 'You have reached your quota limit. Please try again later.'
         self.results = None
@@ -45,103 +43,82 @@ class TrendReq(object):
         self.hl = hl
         self.geo = geo
         self.proxies = proxies
-        self.timeout = timeout
-        self.kw_lists = list()
+        self.kw_list = list()
 
         # intialize widget payloads
-        self.token_payloads = list()
-        self.interest_over_time_widgets = list()
+        self.token_payload = dict()
+        self.interest_over_time_widget = dict()
         self.interest_by_region_widget = dict()
         self.related_topics_widget_list = list()
         self.related_queries_widget_list = list()
 
-    def _get_data(self, url, method=GET_METHOD, trim_chars=0, params=None, **kwargs):
+    def _get_data(self, url, method=GET_METHOD, trim_chars=0, **kwargs):
         """Send a request to Google and return the JSON response as a Python object
 
-        :param url: list of url to which the request will be sent
+        :param url: the url to which the request will be sent
         :param method: the HTTP method ('get' or 'post')
         :param trim_chars: how many characters should be trimmed off the beginning of the content of the response
             before this is passed to the JSON parser
         :param kwargs: any extra key arguments passed to the request builder (usually query parameters or data)
         :return:
         """
-        futures = list()
-        session = FuturesSession()
-        
         if method == TrendReq.POST_METHOD:
-            for param_set in params:
-                future = session.post(url, proxies=self.proxies, timeout=self.timeout, params=param_set)
-                futures.append(future)
+            response = requests.post(url, proxies, **kwargs)
         else:
-            for param_set in params:
-                future = session.get(url, proxies=self.proxies, timeout=self.timeout, params=param_set)
-                futures.append(future)
-        
+            response = requests.get(url, proxies, **kwargs)
+
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
         # but occasionally it sends 'application/javascript
         # and sometimes even 'text/javascript
-        responses = list()
-        for future in futures:
-            response = future.result()
-            if 'application/json' in response.headers['Content-Type'] or \
-                'application/javascript' in response.headers['Content-Type'] or \
-                    'text/javascript' in response.headers['Content-Type']:
-                
-                # trim initial characters
-                # some responses start with garbage characters, like ")]}',"
-                # these have to be cleaned before being passed to the json parser
-                content = response.text[trim_chars:]
-    
-                # parse json
-                result = json.loads(content)
-                
-                responses.append(result)
-            else:
-                # this is often the case when the amount of keywords in the payload for the IP
-                # is not allowed by Google
-                raise exceptions.ResponseError('The request failed: Google returned a '
-                                               'response with code {0}.'.format(response.status_code), response=response)
-                                               
-        return responses
+        if 'application/json' in response.headers['Content-Type'] or \
+            'application/javascript' in response.headers['Content-Type'] or \
+                'text/javascript' in response.headers['Content-Type']:
 
-    def build_payload(self, kw_lists, cat=0, timeframe='today 5-y', geo='', gprop=''):
+            # trim initial characters
+            # some responses start with garbage characters, like ")]}',"
+            # these have to be cleaned before being passed to the json parser
+            content = response.text[trim_chars:]
+
+            # parse json
+            return json.loads(content)
+        else:
+            # this is often the case when the amount of keywords in the payload for the IP
+            # is not allowed by Google
+            raise exceptions.ResponseError('The request failed: Google returned a '
+                                           'response with code {0}.'.format(response.status_code), response=response)
+
+    def build_payload(self, kw_list, cat=0, timeframe='today 5-y', geo='', gprop=''):
         """Create the payload for related queries, interest over time and interest by region"""
-        self.kw_lists = kw_lists
+        self.kw_list = kw_list
         self.geo = geo
+        self.token_payload = {
+            'hl': self.hl,
+            'tz': self.tz,
+            'req': {'comparisonItem': [], 'category': cat},
+            'property': gprop,
+        }
 
         # build out json for each keyword
-        for kw_list in kw_lists:
-            token_payload = {
-                'hl': self.hl,
-                'tz': self.tz,
-                'req': {'comparisonItem': [], 'category': cat},
-                'property': gprop,
-            }
-            for kw in kw_list:
-                keyword_payload = {
-                    'keyword': kw,
-                    'time': timeframe,
-                    'geo': self.geo
-                }
-                token_payload['req']['comparisonItem'].append(keyword_payload)
-            token_payload['req'] = json.dumps(token_payload['req'])
-            self.token_payloads.append(token_payload)
-            # requests will mangle this if it is not a string
+        for kw in self.kw_list:
+            keyword_payload = {'keyword': kw, 'time': timeframe, 'geo': self.geo}
+            self.token_payload['req']['comparisonItem'].append(keyword_payload)
+        # requests will mangle this if it is not a string
+        self.token_payload['req'] = json.dumps(self.token_payload['req'])
         # get tokens
         self._tokens()
         return
 
     def _tokens(self):
         """Makes request to Google to get API tokens for interest over time, interest by region and related queries"""
-        
+
         # make the request and parse the returned json
-        widget_dicts = self._get_data(
+        widget_dict = self._get_data(
             url=TrendReq.GENERAL_URL,
             method=TrendReq.GET_METHOD,
-            params=self.token_payloads,
+            params=self.token_payload,
             trim_chars=4,
-        )
+        )['widgets']
 
         # order of the json matters...
         first_region_token = True
@@ -150,68 +127,61 @@ class TrendReq(object):
         self.related_queries_widget_list[:] = []
         self.related_topics_widget_list[:] = []
         # assign requests
-        for widget_dict in widget_dicts:
-            for widget in widget_dict['widgets']:
-                if widget['id'] == 'TIMESERIES':
-                    self.interest_over_time_widgets.append(widget)
-                if widget['id'] == 'GEO_MAP' and first_region_token:
-                    self.interest_by_region_widget = widget
-                    first_region_token = False
-                # response for each term, put into a list
-                if 'RELATED_TOPICS' in widget['id']:
-                    self.related_topics_widget_list.append(widget)
-                if 'RELATED_QUERIES' in widget['id']:
-                    self.related_queries_widget_list.append(widget)
+        for widget in widget_dict:
+            if widget['id'] == 'TIMESERIES':
+                self.interest_over_time_widget = widget
+            if widget['id'] == 'GEO_MAP' and first_region_token:
+                self.interest_by_region_widget = widget
+                first_region_token = False
+            # response for each term, put into a list
+            if 'RELATED_TOPICS' in widget['id']:
+                self.related_topics_widget_list.append(widget)
+            if 'RELATED_QUERIES' in widget['id']:
+                self.related_queries_widget_list.append(widget)
         return
 
     def interest_over_time(self):
         """Request data from Google's Interest Over Time section and return a dataframe"""
-        
-        over_time_payload = list()
-        for interest_over_time_widget in self.interest_over_time_widgets:
-            over_time_payload.append({
-                # convert to string as requests will mangle
-                'req': json.dumps(interest_over_time_widget['request']),
-                'token': interest_over_time_widget['token'],
-                'tz': self.tz
-            })
-        
+
+        over_time_payload = {
+            # convert to string as requests will mangle
+            'req': json.dumps(self.interest_over_time_widget['request']),
+            'token': self.interest_over_time_widget['token'],
+            'tz': self.tz
+        }
+
         # make the request and parse the returned json
-        req_jsons = self._get_data(
+        req_json = self._get_data(
             url=TrendReq.INTEREST_OVER_TIME_URL,
             method=TrendReq.GET_METHOD,
             trim_chars=5,
             params=over_time_payload,
         )
-        
-        final = list()
-        for counter, req_json in enumerate(req_jsons):
-            df = pd.DataFrame(req_json['default']['timelineData'])
-            if (df.empty):
-                final.append(df)
 
-            df['date'] = pd.to_datetime(df['time'].astype(dtype='float64'), unit='s')
-            df = df.set_index(['date']).sort_index()
+        df = pd.DataFrame(req_json['default']['timelineData'])
+        if (df.empty):
+            return df
+
+        df['date'] = pd.to_datetime(df['time'].astype(dtype='float64'), unit='s')
+        df = df.set_index(['date']).sort_index()
+        # split list columns into seperate ones, remove brackets and split on comma
+        result_df = df['value'].apply(lambda x: pd.Series(str(x).replace('[', '').replace(']', '').split(',')))
+        # rename each column with its search term, relying on order that google provides...
+        for idx, kw in enumerate(self.kw_list):
+            result_df[kw] = result_df[idx].astype('int')
+            del result_df[idx]
+
+        if 'isPartial' in df:
+            # make other dataframe from isPartial key data
             # split list columns into seperate ones, remove brackets and split on comma
-            result_df = df['value'].apply(lambda x: pd.Series(str(x).replace('[', '').replace(']', '').split(',')))
-            # rename each column with its search term, relying on order that google provides...
-            for idx, kw in enumerate(self.kw_lists[counter]):
-                result_df[kw] = result_df[idx].astype('int')
-                del result_df[idx]
-
-            if 'isPartial' in df:
-                # make other dataframe from isPartial key data
-                # split list columns into seperate ones, remove brackets and split on comma
-                df = df.fillna(False)
-                result_df2 = df['isPartial'].apply(lambda x: pd.Series(str(x).replace('[', '').replace(']', '').split(',')))
-                result_df2.columns = ['isPartial']
-                # concatenate the two dataframes
-                final_res = pd.concat([result_df, result_df2], axis=1)
-                fin
-            else:
-                final_res = result_df
-                final_res['isPartial'] = False
-            final.append(final_res)
+            df = df.fillna(False)
+            result_df2 = df['isPartial'].apply(lambda x: pd.Series(str(x).replace('[', '').replace(']', '').split(',')))
+            result_df2.columns = ['isPartial']
+            # concatenate the two dataframes
+            final = pd.concat([result_df, result_df2], axis=1)
+        else:
+            final = result_df
+            final['isPartial'] = False
 
         return final
 
@@ -334,7 +304,6 @@ class TrendReq(object):
             url=TrendReq.TRENDING_SEARCHES_URL,
             method=TrendReq.POST_METHOD,
             data=forms,
-            params = None
         )['trendsByDateList']
         result_df = pd.DataFrame()
 
@@ -376,4 +345,3 @@ class TrendReq(object):
             trim_chars=5
         )['default']['topics']
         return req_json
-        
