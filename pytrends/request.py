@@ -67,7 +67,7 @@ class TrendReq(object):
         :return:
         """
         s = requests.Session()
-        if self.proxes != None:
+        if self.proixes != None:
             s.proxies = self.proxies
         if self.proxy_user != None and self.proxy_pass != None:
             s.auth = (self.proxy_user, self.proxy_pass)
