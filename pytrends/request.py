@@ -70,7 +70,9 @@ class TrendReq(object):
         if self.proxies != None:
             s.proxies = self.proxies
         if self.proxy_user != None and self.proxy_pass != None:
-            s.headers = {'Proxy-Authorization': "Basic {}".format(base64.b64encode("{}:{}".format(self.proxy_user, self.proxy_pass)))}
+            auth_str = self.proxy_user + ':' + self.proxy_pass
+            auth = base64.b64encode(auth_str.encode())
+            s.headers = {'Proxy-Authorization': 'Basic ' + auth}
         if method == TrendReq.POST_METHOD:
             response = s.post(url, timeout=self.timeout, **kwargs)
         else:
