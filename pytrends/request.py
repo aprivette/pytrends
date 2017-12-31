@@ -2,6 +2,7 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 import json
 import sys
+import base64
 
 import pandas as pd
 import requests
@@ -70,7 +71,8 @@ class TrendReq(object):
         if self.proxies != None:
             s.proxies = self.proxies
         if self.proxy_user != None and self.proxy_pass != None:
-            s.auth = (self.proxy_user, self.proxy_pass)
+            auth = base64.b64encode(self.proxy_user + ':' + self.proxy_pass)
+            s.headers = {'Proxy-Authorization': 'Basic ' + auth}
         if method == TrendReq.POST_METHOD:
             response = s.post(url, timeout=self.timeout, **kwargs)
         else:
