@@ -5,6 +5,7 @@ import sys
 
 import pandas as pd
 import requests
+from requests.auth import HTTPProxyAuth
 
 from pytrends import exceptions
 
@@ -30,7 +31,7 @@ class TrendReq(object):
     TOP_CHARTS_URL = 'https://trends.google.com/trends/topcharts/chart'
     SUGGESTIONS_URL = 'https://trends.google.com/trends/api/autocomplete/'
 
-    def __init__(self, hl='en-US', tz=360, geo='', proxies=None, timeout=None):
+    def __init__(self, hl='en-US', tz=360, geo='', proxies=None, proxy_user=None, proxy_pass=None, timeout=None):
         """
         Initialize default values for params
         """
@@ -43,6 +44,8 @@ class TrendReq(object):
         self.hl = hl
         self.geo = geo
         self.proxies = proxies
+        self.proxy_user = proxy_user
+        self.proxy_pass = proxy_pass
         self.timeout = timeout
         self.kw_list = list()
 
@@ -63,10 +66,15 @@ class TrendReq(object):
         :param kwargs: any extra key arguments passed to the request builder (usually query parameters or data)
         :return:
         """
-        if method == TrendReq.POST_METHOD:
-            response = requests.post(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
+        if self.proxy_user != None and self.proxy_pass != None:
+            auth = HTTPProxyAuth(self.proxy_user, self.proxy_pass)
         else:
-            response = requests.get(url, proxies=self.proxies, timeout=self.timeout, **kwargs)
+            auth = None
+        
+        if method == TrendReq.POST_METHOD:
+            response = requests.post(url, proxies=self.proxies, auth=auth, timeout=self.timeout, **kwargs)
+        else:
+            response = requests.get(url, proxies=self.proxies, auth=auth, timeout=self.timeout, **kwargs)
 
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
