@@ -2,10 +2,10 @@ from __future__ import absolute_import, print_function, unicode_literals
 
 import json
 import sys
-import base64
 
 import pandas as pd
 import requests
+from requests.auth import HTTPProxyAuth
 
 from pytrends import exceptions
 
@@ -70,9 +70,7 @@ class TrendReq(object):
         if self.proxies != None:
             s.proxies = self.proxies
         if self.proxy_user != None and self.proxy_pass != None:
-            auth_str = self.proxy_user + ':' + self.proxy_pass
-            auth = base64.b64encode(auth_str.encode())
-            s.headers = {'Proxy-Authorization': "Basic %s" % auth}
+            s.auth = (self.proxy_user, self.proxy_pass)
         if method == TrendReq.POST_METHOD:
             response = s.post(url, timeout=self.timeout, **kwargs)
         else:
