@@ -66,15 +66,15 @@ class TrendReq(object):
         :param kwargs: any extra key arguments passed to the request builder (usually query parameters or data)
         :return:
         """
+        s = requests.Session()
+        if self.proxes != None:
+            s.proxies = self.proxies
         if self.proxy_user != None and self.proxy_pass != None:
-            auth = HTTPProxyAuth(self.proxy_user, self.proxy_pass)
-        else:
-            auth = None
-        
+            s.auth = (self.proxy_user, self.proxy_pass)
         if method == TrendReq.POST_METHOD:
-            response = requests.post(url, proxies=self.proxies, auth=auth, timeout=self.timeout, **kwargs)
+            response = s.post(url, timeout=self.timeout, **kwargs)
         else:
-            response = requests.get(url, proxies=self.proxies, auth=auth, timeout=self.timeout, **kwargs)
+            response = s.get(url, timeout=self.timeout, **kwargs)
 
         # check if the response contains json and throw an exception otherwise
         # Google mostly sends 'application/json' in the Content-Type header,
